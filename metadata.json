@@ -1,0 +1,7 @@
+{
+  "name": "Impetus AI Debt Collection Assistant",
+  "description": "A conversational voice app for Impetus collection services. It talks to customers to convince them to pay loan dues, educating them on the benefits of good repayment history and avoiding penalties.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
