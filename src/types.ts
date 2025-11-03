@@ -3,11 +3,12 @@ export enum AppStatus {
   CONNECTING = 'CONNECTING',
   LISTENING = 'LISTENING',
   SPEAKING = 'SPEAKING',
+  CALLING = 'CALLING',
   ERROR = 'ERROR',
 }
 
 export interface TranscriptEntry {
-  speaker: 'user' | 'ai';
+  speaker: 'user' | 'ai' | 'system';
   text: string;
 }
 

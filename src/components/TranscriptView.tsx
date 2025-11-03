@@ -19,27 +19,38 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({ transcript }) => {
           <p className="text-gray-400">Conversation transcript will appear here.</p>
         </div>
       ) : (
-        transcript.map((entry, index) => (
-          <div
-            key={index}
-            className={`flex flex-col ${
-              entry.speaker === 'user' ? 'items-start' : 'items-end'
-            }`}
-          >
+        transcript.map((entry, index) => {
+          if (entry.speaker === 'system') {
+            return (
+              <div key={index} className="text-center my-2">
+                <p className="text-xs text-gray-500 italic px-4 py-1 bg-gray-700/50 rounded-full inline-block">
+                  {entry.text}
+                </p>
+              </div>
+            );
+          }
+          return (
             <div
-              className={`rounded-lg px-4 py-2 max-w-[80%] ${
-                entry.speaker === 'user'
-                  ? 'bg-blue-600/70 text-white rounded-br-none'
-                  : 'bg-gray-600/70 text-gray-200 rounded-bl-none'
+              key={index}
+              className={`flex flex-col ${
+                entry.speaker === 'user' ? 'items-start' : 'items-end'
               }`}
             >
-              <p className="text-sm font-bold capitalize mb-1">
-                {entry.speaker === 'ai' ? 'Impetus AI' : 'Customer'}
-              </p>
-              <p>{entry.text}</p>
+              <div
+                className={`rounded-lg px-4 py-2 max-w-[80%] ${
+                  entry.speaker === 'user'
+                    ? 'bg-blue-600/70 text-white rounded-br-none'
+                    : 'bg-gray-600/70 text-gray-200 rounded-bl-none'
+                }`}
+              >
+                <p className="text-sm font-bold capitalize mb-1">
+                  {entry.speaker === 'ai' ? 'Impetus AI' : 'Customer'}
+                </p>
+                <p>{entry.text}</p>
+              </div>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
       <div ref={endOfMessagesRef} />
     </div>

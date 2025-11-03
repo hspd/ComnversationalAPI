@@ -1,6 +1,23 @@
-import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
 import { encode } from '../utils/audioUtils';
 import { PrebuiltVoice, Language } from '../types';
+
+const connectCallFunctionDeclaration: FunctionDeclaration = {
+  name: 'connectCall',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Connects the user to a specified phone number for payment.',
+    properties: {
+      phoneNumber: {
+        type: Type.STRING,
+        description:
+          'The phone number to connect the call to. Must be a valid number.',
+      },
+    },
+    required: ['phoneNumber'],
+  },
+};
+
 
 const getSystemInstruction = (customerName: string, language: Language): string => {
   const langInstruction = language === 'hindi'
@@ -10,17 +27,17 @@ const getSystemInstruction = (customerName: string, language: Language): string 
   const mainInstruction = language === 'hindi'
     ? `आप 'इम्पेटस कलेक्शन सर्विसेज' के लिए काम करने वाले एक पेशेवर और सहानुभूतिपूर्ण ऋण वसूली एजेंट हैं। आपका लक्ष्य ग्राहक, ${customerName} से उनके बकाया ऋण भुगतान के बारे में बात करना है। आपको विनम्र, समझदार होना चाहिए, लेकिन बकाया राशि के समाधान की आवश्यकता के बारे में दृढ़ भी रहना चाहिए।
 
-आपका मुख्य उद्देश्य ${customerName} को ऋण के निपटान (settlement) या फौजदारी (foreclosure) के लिए मनाना है।
+आपका मुख्य उद्देश्य ${customerName} को ऋण के निपटान (settlement) या प्री-क्लोजर (pre-closure) के लिए मनाना है।
 
 बातचीत के दौरान, आपको:
 1.  ${customerName} को उनके बकाया ऋण के बारे में धीरे से याद दिलाएं।
 2.  उन्हें बताएं कि भुगतान करने से हमारी कंपनी से लगातार आने वाले रिमाइंडर कॉल बंद हो जाएंगे और एक ऋण वसूली एजेंट (DRA) को उनके निवास या कार्यस्थल पर जाने से रोका जा सकेगा।
 3.  एक अच्छा पुनर्भुगतान इतिहास और उच्च CIBIL स्कोर बनाए रखने के लाभों पर उन्हें शिक्षित करें।
-4.  ग्राहक को फौजदारी (Foreclosure) और निपटान (Settlement) के बीच के अंतरों को स्पष्ट रूप से समझाएं ताकि वे एक सूचित निर्णय ले सकें।
+4.  ग्राहक को प्री-क्लोजर (Pre-closure) और निपटान (Settlement) के बीच के अंतरों को स्पष्ट रूप से समझाएं ताकि वे एक सूचित निर्णय ले सकें।
 
-यहाँ फौजदारी और निपटान की विस्तृत तुलना है जिसका उपयोग आप उन्हें समझाने के लिए कर सकते हैं:
+यहाँ प्री-क्लोजर और निपटान की विस्तृत तुलना है जिसका उपयोग आप उन्हें समझाने के लिए कर सकते हैं:
 
-**1. फौजदारी (Foreclosure / Pre-closure):**
+**1. प्री-क्लोजर (Pre-closure):**
 *   **चुकौती राशि:** शेष मूलधन, ब्याज और किसी भी दंड का 100% भुगतान किया जाता है।
 *   **कब उपयोग करें:** जब आपके पास अतिरिक्त धनराशि हो और आप अपना कर्ज जल्दी चुकाना चाहते हों।
 *   **क्रेडिट स्कोर पर प्रभाव:** सकारात्मक। आपका क्रेडिट स्कोर बढ़ सकता है और आपकी साख में सुधार होता है।
@@ -39,17 +56,17 @@ const getSystemInstruction = (customerName: string, language: Language): string 
 अपना और कंपनी का परिचय देकर बातचीत शुरू करें। पूरी बातचीत के दौरान एक संवादी और सहायक स्वर बनाए रखें। आक्रामक या धमकी भरा व्यवहार न करें। आपका लक्ष्य समाधान खोजना है, टकराव पैदा करना नहीं।`
     : `तुम्ही 'इम्पेटस कलेक्शन सर्व्हिसेस'साठी काम करणारे एक व्यावसायिक आणि सहानुभूतीपूर्ण कर्ज वसुली एजंट आहात. तुमचे ध्येय ग्राहक, ${customerName}, यांच्याशी त्यांच्या थकीत कर्जफेडीबद्दल संभाषण साधणे आहे. तुम्ही विनम्र, समजूतदार, पण थकबाकीची परतफेड करण्याच्या गरजेबद्दल ठाम असले पाहिजे.
 
-तुमचे मुख्य उद्दिष्ट ${customerName} यांना कर्जाची तडजोड (settlement) किंवा फोरक्लोजर (foreclosure) करण्यासाठी पटवणे आहे.
+तुमचे मुख्य उद्दिष्ट ${customerName} यांना कर्जाची तडजोड (settlement) किंवा प्री-क्लोजर (pre-closure) करण्यासाठी पटवणे आहे.
 
 संभाषणादरम्यान, तुम्हाला हे करायचे आहे:
 1.  ${customerName} यांना त्यांच्या थकीत कर्जाबद्दल हळुवारपणे आठवण करून द्या.
 2.  त्यांना सांगा की पेमेंट केल्याने आमच्या कंपनीकडून येणारे सततचे रिमाइंडर कॉल्स थांबतील आणि कर्ज वसुली एजंट (DRA) त्यांच्या घरी किंवा कामाच्या ठिकाणी भेट देण्यापासून थांबेल.
 3.  चांगला परतफेड इतिहास आणि उच्च CIBIL स्कोर राखण्याचे फायदे सांगा.
-4.  ग्राहकाला फोरक्लोजर (Foreclosure) आणि तडजोड (Settlement) मधील फरक स्पष्टपणे समजावून सांगा जेणेकरून ते माहितीपूर्ण निर्णय घेऊ शकतील.
+4.  ग्राहकाला प्री-क्लोजर (Pre-closure) आणि तडजोड (Settlement) मधील फरक स्पष्टपणे समजावून सांगा जेणेकरून ते माहितीपूर्ण निर्णय घेऊ शकतील.
 
-येथे फोरक्लोजर आणि तडजोडीची तपशीलवार तुलना आहे जी तुम्ही त्यांना समजावण्यासाठी वापरू शकता:
+येथे प्री-क्लोजर आणि तडजोडीची तपशीलवार तुलना आहे जी तुम्ही त्यांना समजावण्यासाठी वापरू शकता:
 
-**1. फोरक्लोजर (Foreclosure / Pre-closure):**
+**1. प्री-क्लोजर (Pre-closure):**
 *   **परतफेड रक्कम:** उर्वरित मुद्दल, व्याज आणि कोणत्याही दंडाची 100% रक्कम भरणे आवश्यक आहे.
 *   **कधी वापरावे:** जेव्हा तुमच्याकडे अतिरिक्त निधी असेल आणि तुम्हाला तुमचे कर्ज लवकर फेडायचे असेल.
 *   **क्रेडिट स्कोअरवर परिणाम:** सकारात्मक. तुमचा क्रेडिट स्कोअर वाढू शकतो आणि तुमची पत सुधारते.
@@ -67,7 +84,11 @@ const getSystemInstruction = (customerName: string, language: Language): string 
 
 स्वतःची आणि कंपनीची ओळख करून देऊन संभाषण सुरू करा. संपूर्ण संभाषणात एक संवादी आणि उपयुक्त सूर ठेवा. आक्रमक किंवा धमकीवजा वागू नका. तुमचे ध्येय तोडगा काढणे आहे, संघर्ष निर्माण करणे नाही.`;
 
-  return `${langInstruction}\n\n${mainInstruction}`;
+    const functionCallingInstruction = language === 'hindi'
+        ? `\n\n**उपकरण निर्देश:**\nजब ग्राहक भुगतान करने के लिए तैयार हो, तो आपको 'connectCall' उपकरण का उपयोग करना होगा। इस उपकरण को फ़ोन नंबर '9970600771' के साथ कॉल करें। नंबर न मांगें, सीधे इसी का उपयोग करें। उपकरण को कॉल करने के बाद, उपयोगकर्ता को बताएं कि आप उन्हें कनेक्ट कर रहे हैं।`
+        : `\n\n**टूल सूचना:**\nजेव्हा ग्राहक पेमेंट करण्यास तयार असल्याची पुष्टी करतो, तेव्हा तुम्ही 'connectCall' टूल वापरणे आवश्यक आहे. '9970600771' या फोन नंबरने टूलला कॉल करा. नंबर विचारू नका, थेट हाच वापरा. टूल कॉल केल्यानंतर, वापरकर्त्याला कळवा की तुम्ही त्यांना कनेक्ट करत आहात.`;
+
+  return `${langInstruction}\n\n${mainInstruction}\n${functionCallingInstruction}`;
 };
 
 
@@ -82,6 +103,7 @@ export class GeminiService {
   private ai: GoogleGenAI;
   private sessionPromise: Promise<{
     sendRealtimeInput(input: { media: Blob }): void;
+    sendToolResponse(response: { functionResponses: { id: string; name: string; response: { result: any; }; } }): void;
     close(): void;
   }> | null = null;
   private mediaStream: MediaStream | null = null;
@@ -90,7 +112,6 @@ export class GeminiService {
   private source: MediaStreamAudioSourceNode | null = null;
 
   constructor() {
-    // FIX: Per coding guidelines, the API key must be obtained exclusively from `process.env.API_KEY`.
     if (!process.env.API_KEY) {
       throw new Error("API_KEY environment variable not set");
     }
@@ -132,9 +153,10 @@ export class GeminiService {
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: voice.toUpperCase() } },
           },
           systemInstruction: systemInstruction,
+          tools: [{functionDeclarations: [connectCallFunctionDeclaration]}],
         },
       });
     } catch (error) {
@@ -162,6 +184,20 @@ export class GeminiService {
     
     this.source.connect(this.scriptProcessor);
     this.scriptProcessor.connect(this.audioContext.destination);
+  }
+
+  public sendToolResponse(id: string, name: string, result: any): void {
+    if (this.sessionPromise) {
+        this.sessionPromise.then((session) => {
+            session.sendToolResponse({
+                functionResponses: {
+                    id,
+                    name,
+                    response: { result },
+                },
+            });
+        });
+    }
   }
 
   close(): void {

@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('hindi');
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [callingInfo, setCallingInfo] = useState<{ phoneNumber: string; callId: string } | null>(null);
 
   const geminiServiceRef = useRef<GeminiService | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
@@ -38,6 +39,7 @@ const App: React.FC = () => {
     audioSourcesRef.current.forEach(source => source.stop());
     audioSourcesRef.current.clear();
     nextAudioStartTimeRef.current = 0;
+    setCallingInfo(null);
   }, []);
 
   const handleMessage = useCallback(async (message: LiveServerMessage) => {
@@ -68,6 +70,18 @@ const App: React.FC = () => {
       setStatus(AppStatus.LISTENING);
     }
 
+    if (message.toolCall) {
+      for (const fc of message.toolCall.functionCalls) {
+        if (fc.name === 'connectCall') {
+          console.log('Function Call requested: connectCall', fc.args);
+          setStatus(AppStatus.CALLING);
+          const phoneNumber = (fc.args.phoneNumber as string) || 'the payment line';
+          setTranscript(prev => [...prev, { speaker: 'system', text: `Connecting call to ${phoneNumber}...` }]);
+          setCallingInfo({ phoneNumber, callId: fc.id });
+        }
+      }
+    }
+
     const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
     if (base64Audio && outputAudioContextRef.current) {
         const audioBuffer = await decodeAudioData(
@@ -94,6 +108,31 @@ const App: React.FC = () => {
         audioSourcesRef.current.add(source);
     }
   }, []);
+  
+  useEffect(() => {
+    if (status === AppStatus.CALLING && callingInfo) {
+      const timerId = setTimeout(() => {
+        if (geminiServiceRef.current) {
+          geminiServiceRef.current.sendToolResponse(callingInfo.callId, 'connectCall', 'ok, the user has been connected.');
+        }
+        setCallingInfo(null);
+        setStatus(AppStatus.LISTENING);
+      }, 3000); // Simulate 3 second connection delay
+
+      return () => clearTimeout(timerId);
+    }
+  }, [status, callingInfo]);
+
+  const handleCancelCall = useCallback(() => {
+    if (!callingInfo) return;
+
+    if (geminiServiceRef.current) {
+      geminiServiceRef.current.sendToolResponse(callingInfo.callId, 'connectCall', 'ok, the user cancelled the call.');
+    }
+    setTranscript(prev => [...prev, { speaker: 'system', text: `Call cancelled.` }]);
+    setCallingInfo(null);
+    setStatus(AppStatus.LISTENING);
+  }, [callingInfo]);
 
   const startConversation = useCallback(async (customerName: string) => {
     setStatus(AppStatus.CONNECTING);
@@ -175,21 +214,41 @@ const App: React.FC = () => {
               <p className="text-sm">{errorMessage}</p>
             </div>
           )}
-          <div className="my-6 flex flex-col sm:flex-row gap-6">
-            <LanguageSelector
-              selectedLanguage={language}
-              onChange={setLanguage}
-              disabled={status !== AppStatus.IDLE && status !== AppStatus.ERROR}
-            />
-            <VoiceSelector
-              selectedVoice={selectedVoice}
-              onChange={setSelectedVoice}
-              disabled={status !== AppStatus.IDLE && status !== AppStatus.ERROR}
-            />
-          </div>
-          <div>
-            <ControlButton status={status} onClick={handleToggleConversation} />
-          </div>
+          
+          {status === AppStatus.CALLING && callingInfo ? (
+            <div className="my-6 w-full max-w-sm flex flex-col items-center text-center gap-4 p-6 bg-gray-700/50 rounded-lg shadow-lg animate-pulse">
+               <div className="flex items-center gap-3">
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-teal-400" viewBox="0 0 20 20" fill="currentColor">
+                       <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                   </svg>
+                   <p className="text-lg text-gray-200">Connecting to {callingInfo.phoneNumber}...</p>
+               </div>
+               <button 
+                   onClick={handleCancelCall}
+                   className="mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-8 rounded-lg transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75"
+               >
+                   Cancel
+               </button>
+           </div>
+          ) : (
+            <>
+              <div className="my-6 flex flex-col sm:flex-row gap-6">
+                <LanguageSelector
+                  selectedLanguage={language}
+                  onChange={setLanguage}
+                  disabled={status !== AppStatus.IDLE && status !== AppStatus.ERROR}
+                />
+                <VoiceSelector
+                  selectedVoice={selectedVoice}
+                  onChange={setSelectedVoice}
+                  disabled={status !== AppStatus.IDLE && status !== AppStatus.ERROR}
+                />
+              </div>
+              <div>
+                <ControlButton status={status} onClick={handleToggleConversation} />
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>
